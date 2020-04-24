@@ -1,6 +1,7 @@
 #ifndef PARAMETER_H
 #define PARAMETER_H
 
+#define APPNAME "ExectoAEKeyin"
 #define TIMEOUT                 20
 #define HEARTBEAT_INTERVAL      10 * 1000
 #define MAX_DATA_SIZE           4096

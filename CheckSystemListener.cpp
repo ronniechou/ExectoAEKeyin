@@ -112,12 +112,14 @@ void CheckSystemListener::Execute( void )
                 {
                     FConnectFailCount ++;
                     UFC::BufferedLog::Printf(" [%s][%s] UFC exception occurred <FailLogonCount:%d> <Reason:%s> ", __FILE__,__func__,FConnectFailCount, e.what() );  
+                    UFC::SleepMS(10*1000);
                     continue;
                 } 
                 catch(...)
                 {
                     FConnectFailCount ++;
                     UFC::BufferedLog::Printf(" [%s][%s] Unknown exception occurred", __FILE__,__func__ );
+                    UFC::SleepMS(10*1000);
                     continue;
                 }
                 FConnectFailCount = 0;
@@ -140,7 +142,8 @@ void CheckSystemListener::Execute( void )
                     else
                     {
                         UFC::BufferedLog::DebugPrintf( " [%s][%s]  start to send ExecutionData.", __FILE__,__func__);
-                        SendExecutionData();
+                        if( SendExecutionData() == FALSE)
+                            UFC::SleepMS(10*1000);
                     }
                 }
             }            
@@ -230,7 +233,7 @@ BOOL CheckSystemListener::SendHeartBeat()
     FEventHeartBeat.ResetEvent();               
     try
     {
-        UFC::BufferedLog::Printf(" [%s][%s] send data=%s", __FILE__,__func__, asData.c_str() );     
+        UFC::BufferedLog::DebugPrintf(" [%s][%s] send data=%s", __FILE__,__func__, asData.c_str());               
         FSocketObject->BlockSend(caBuffer,iDataLen);
     }
     catch( UFC::Exception &e )
@@ -255,17 +258,18 @@ BOOL CheckSystemListener::SendHeartBeat()
     return TRUE;
 }
 //------------------------------------------------------------------------------
-void CheckSystemListener::SendExecutionData(void)
+BOOL CheckSystemListener::SendExecutionData(void)
 {
     if( !UFC::FileExists(g_asExecutionFileURL.c_str()) )
     {
         UFC::BufferedLog::DebugPrintf(" [%s][%s] Execution file NOT exist. <FileName:%s>", __FILE__,__FUNCTION__,g_asExecutionFileURL.c_str());
-        return;
+        return FALSE;
     }
     UFC::FileStream File(g_asExecutionFileURL.c_str(),0);
     UFC::BufferedLog::DebugPrintf(" [%s][%s] file size=%ld", __FILE__,__FUNCTION__,File.GetSize());
     UFC::AnsiString asLine,asHost,asKey;
     int iCurrentSeqNo = 0;
+    BOOL bIsSendOK = TRUE;
     
     while(true)
     {
@@ -355,7 +359,7 @@ void CheckSystemListener::SendExecutionData(void)
         {
             UFC::BufferedLog::Printf( " [%s][%s] %s <IP:%s><Port:%d>", __FILE__,__func__,ERRMSG_TIMEOUT,FSocketObject->GetPeerIPAddress().c_str(),FSocketObject->GetPort());  
             FSocketObject->Disconnect();
-            return ;
+            return FALSE;
         } 
         FEventHeartBeat.ResetEvent();
         FSendTick = iCurrentTick;
@@ -367,10 +371,12 @@ void CheckSystemListener::SendExecutionData(void)
             if(iCurrentSeqNo +1 != FSeqNo)
             {
                 UFC::BufferedLog::Printf("[%s][%s] Server expect SeqNo not match Client next SeqNo <Client next SeqNo:%d><Server expect SeqNo:%d>\n", __FILE__,__func__, iCurrentSeqNo+1, FSeqNo);     
+                bIsSendOK = FALSE;
                 break;
             }
         }
     }
+    return bIsSendOK;
 }
 //------------------------------------------------------------------------------
 BOOL CheckSystemListener::UpdateKey(UFC::AnsiString *pKey)

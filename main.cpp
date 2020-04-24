@@ -8,21 +8,21 @@
 #include "NameValueMessage.h"
 using namespace std;
 //------------------------------------------------------------------------------
-UFC::AnsiString             g_asAppName                 = "ExectoAEKeyin";
+UFC::AnsiString             g_asAppName                 = "";
 UFC::AnsiString             g_asArgv                    = "";
 UFC::AnsiString             g_asLogDate                 = "";
 UFC::AnsiString             g_asChineseLogDate          = "";
-UFC::AnsiString             g_asLogPath                 = "../log/";    
-UFC::AnsiString             g_asLogPrefixName           = "ExectoAEKeyin.FUT"; 
+UFC::AnsiString             g_asLogPath                 = ""; 
+UFC::AnsiString             g_asLogPrefixName           = "";  
 UFC::AnsiString             g_asLogURL                  = ""; 
-UFC::AnsiString             g_asConfigURL               = "../cfg/ExectoAEKeyin.FUT.ini";
-UFC::AnsiString             g_asExecutionFilePrefix     = "/oms/Speedy/bin/SpeedyFUT.Execution.";
+UFC::AnsiString             g_asConfigURL               = "../cfg/"APPNAME".ini";
+UFC::AnsiString             g_asExecutionFilePrefix     = "";
 UFC::AnsiString             g_asExecutionFileExtension  = ".DATA";
 UFC::AnsiString             g_asExecutionFileURL        = "";
 UFC::AnsiString             g_asTargetSecurity          = SECURITY_FUT;
 UFC::AnsiString             g_asTargetHost              = UFC::Hostname;
-UFC::AnsiString             g_asServerIP                = "127.0.0.1";                         
-UFCType::Int32              g_iServerPort               = 80; 
+UFC::AnsiString             g_asServerIP                = "";                         
+UFCType::Int32              g_iServerPort               = -1; 
 UFC::AnsiString             g_asBackupServerIP          = "";                         
 UFCType::Int32              g_iBackupServerPort         = -1; 
 BOOL                        g_bIsCheckSeqNo             = TRUE;
@@ -39,6 +39,10 @@ BOOL                        g_bRunning                  = TRUE;
 BOOL                        g_bFirstRun                 = FALSE;
 CheckSystemListener*        FAPPListener                = NULL;   
 MBusListener*               FMBusListener               = NULL;  
+UFC::AnsiString             FExecutionFilePrefix_FUT    = "";
+UFC::AnsiString             FExecutionFilePrefix_OPT    = "";
+UFC::AnsiString             FExecutionFileExtension_FUT = ".DATA";
+UFC::AnsiString             FExecutionFileExtension_OPT = ".DATA";
 //------------------------------------------------------------------------------
 void AtStart( void );
 void AtSignal( int signum );
@@ -89,8 +93,7 @@ void StopObjects( void )
 void GetLogDate()
 {
     UFC::GetYYYYMMDD(g_asLogDate,FALSE); 
-    UFC::GetTradeYYYMMDD(g_asChineseLogDate);
-    g_asLogPath.Printf("%s/../log/",UFC::GetCurrentDir().c_str());
+    UFC::GetTradeYYYMMDD(g_asChineseLogDate);    
 }
 //------------------------------------------------------------------------------
 void ParseArg(int argc, char** argv)
@@ -117,7 +120,11 @@ void ParseArg(int argc, char** argv)
             NV_ConfigLine.FromString( asArgv ); 
             if( NV_ConfigLine.IsExists("-date") )
                 NV_ConfigLine.Get("-date", g_asChineseLogDate);          
-        }
+        }      
+        else if( asArgv.AnsiCompare("-FUT")  == 0 )
+            g_asTargetSecurity = SECURITY_FUT;
+        else if( asArgv.AnsiCompare("-OPT")  == 0 )
+            g_asTargetSecurity = SECURITY_OPT;
     }
 }
 //------------------------------------------------------------------------------
@@ -147,7 +154,6 @@ for( int i = 0; i < Config.SectionCount(); i++ )
         HostSection->GetValue("host",asValue);
         printf("host=%s\n",asValue.c_str());
     }
-
 }
 */
     UFC::AnsiString asValue;
@@ -160,18 +166,22 @@ for( int i = 0; i < Config.SectionCount(); i++ )
     if( Config.GetValue( "Setting", "BackupServerIP",asValue ) == TRUE )    
         g_asBackupServerIP = asValue;
     if( Config.GetValue( "Setting", "BackupServerPort",asValue ) == TRUE )    
-        g_iBackupServerPort = asValue.ToInt();
-    if( Config.GetValue( "Setting", "ExecutionFileExtension",asValue ) == TRUE )    
-        g_asExecutionFileExtension = asValue;
-    if( Config.GetValue( "Setting", "ExecutionFilePrefix",asValue ) == TRUE )    
-        g_asExecutionFilePrefix = asValue;
+        g_iBackupServerPort = asValue.ToInt();    
     if( Config.GetValue( "Setting", "CheckSeqNo",asValue ) == TRUE )
     {
         if(asValue.UpperCase().AnsiCompare("N") == 0)
             g_bIsCheckSeqNo = FALSE;
         else
             g_bIsCheckSeqNo = TRUE;
-    }
+    }   
+    if( Config.GetValue( "Setting", "ExecutionFilePrefix_FUT",asValue ) == TRUE )    
+        FExecutionFilePrefix_FUT = asValue;
+    if( Config.GetValue( "Setting", "ExecutionFileExtension_FUT",asValue ) == TRUE )    
+        FExecutionFileExtension_FUT = asValue;    
+    if( Config.GetValue( "Setting", "ExecutionFilePrefix_OPT",asValue ) == TRUE )    
+        FExecutionFilePrefix_OPT = asValue;
+    if( Config.GetValue( "Setting", "ExecutionFileExtension_OPT",asValue ) == TRUE )    
+        FExecutionFileExtension_OPT = asValue;  
     
     if( Config.GetValue( "MBus", "AppName",asValue ) == TRUE )    
         g_asAppName = asValue;
@@ -183,23 +193,59 @@ for( int i = 0; i < Config.SectionCount(); i++ )
         g_asOutputFilePrefix = asValue;
     if( Config.GetValue( "MBus", "OutputFileExtension",asValue ) == TRUE )    
         g_asOutputFileExtension = asValue;
+
+/*
+     if( Config.GetValue( "Setting", "ExecutionFileExtension",asValue ) == TRUE )    
+        g_asExecutionFileExtension = asValue;
+    if( Config.GetValue( "Setting", "ExecutionFilePrefix",asValue ) == TRUE )    
+        g_asExecutionFilePrefix = asValue;
     if( Config.GetValue( "MBus", "ListenSecurity",asValue ) == TRUE )    
         g_asListenSecurity = asValue;
+    if( g_asExecutionFileURL.AnsiPos(SECURITY_OPT) >=0 )
+        g_asTargetSecurity = SECURITY_OPT; 
+    else
+        g_asTargetSecurity = SECURITY_FUT;
+*/  
+}
+//------------------------------------------------------------------------------
+void UpdateVariable()
+{
+    //---- AppName
+    if(g_asAppName.Length() == 0)
+        g_asAppName.Printf("%s.%s",APPNAME,g_asTargetSecurity.c_str());
     
+    //---- server IP
     if(g_asBackupServerIP.Length() == 0)
         g_asBackupServerIP = g_asServerIP;
     if(g_iBackupServerPort < 0)
         g_iBackupServerPort = g_iServerPort;
     
-    g_asExecutionFileURL.Printf("%s%s%s",g_asExecutionFilePrefix.c_str(),g_asChineseLogDate.c_str(),g_asExecutionFileExtension.c_str());
-    if( g_asExecutionFileURL.AnsiPos(SECURITY_OPT) >=0 )
-        g_asTargetSecurity = SECURITY_OPT; 
+    //---- ExecutionFile    /oms/Speedy/bin/SpeedyFUT.Execution.    
+    if(FExecutionFilePrefix_FUT.Length() == 0)
+        FExecutionFilePrefix_FUT.Printf("/oms/Speedy/bin/Speedy%s.Execution.",SECURITY_FUT);
+    if(FExecutionFilePrefix_OPT.Length() == 0)
+        FExecutionFilePrefix_OPT.Printf("/oms/Speedy/bin/Speedy%s.Execution.",SECURITY_OPT);
+    if(g_asTargetSecurity == SECURITY_FUT)
+    {
+        g_asExecutionFilePrefix = FExecutionFilePrefix_FUT;
+        g_asExecutionFileExtension = FExecutionFileExtension_FUT;
+    }
     else
-        g_asTargetSecurity = SECURITY_FUT;
-    g_asLogPrefixName.Printf("ExectoAEKeyin.%s",g_asTargetSecurity.c_str());
+    {
+        g_asExecutionFilePrefix = FExecutionFilePrefix_OPT;
+        g_asExecutionFileExtension = FExecutionFileExtension_OPT;
+    } 
+    g_asExecutionFileURL.Printf("%s%s%s",g_asExecutionFilePrefix.c_str(),g_asChineseLogDate.c_str(),g_asExecutionFileExtension.c_str());
     
+    //---- Log Path
+    g_asLogPath.Printf("%s/../log/",UFC::GetCurrentDir().c_str());
+    g_asLogPrefixName.Printf("%s.%s",APPNAME,g_asTargetSecurity.c_str());
+    g_asLogURL.Printf("%s%s.%s.log",g_asLogPath.c_str(),g_asLogPrefixName.c_str(),g_asLogDate.c_str());
+    
+    //---- MBUS Output File  
+    g_asListenSecurity = g_asTargetSecurity;
     if( g_asOutputFilePrefix.Length() == 0)
-        g_asOutputFilePrefix.Printf("../log/ExectoAEKeyin.%s.Execution.",g_asListenSecurity.c_str());
+        g_asOutputFilePrefix.Printf("../log/%s.%s.Execution.",APPNAME,g_asListenSecurity.c_str());
     g_asOutputFileURL.Printf("%s%s%s",g_asOutputFilePrefix.c_str(),g_asChineseLogDate.c_str(),g_asOutputFileExtension.c_str());    
 }
 //------------------------------------------------------------------------------
@@ -208,8 +254,7 @@ void CreateLogObject()
     try
     {
         if( UFC::FileExists(g_asLogPath) == false)           
-            mkdir(g_asLogPath,S_IRWXU);
-        g_asLogURL.Printf("%s%s.%s.log",g_asLogPath.c_str(),g_asLogPrefixName.c_str(),g_asLogDate.c_str());
+            mkdir(g_asLogPath,S_IRWXU);        
         UFC::BufferedLog::SetLogObject( new UFC::BufferedLog( g_asLogURL.c_str() ,10240,true,true) ); 
         UFC::BufferedLog::SetDebugMode( g_iDEBUG_LEVEL );
         UFC::BufferedLog::SetPrintToStdout( TRUE );   
@@ -270,6 +315,7 @@ int main(int argc, char** argv)
     GetLogDate();
     ParseArg(argc,argv);
     ParseConfig(); 
+    UpdateVariable();
     CreateLogObject();
     AtStart();
     PrintStartUp();

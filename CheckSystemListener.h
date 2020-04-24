@@ -33,7 +33,7 @@ public:
     void ConnectServer( UFC::AnsiString IP, int Port);
     BOOL Logon();
     BOOL SendHeartBeat();
-    void SendExecutionData();
+    BOOL SendExecutionData();
     BOOL UpdateKey(UFC::AnsiString *Key);
     void ProcessResponse(int,UFC::UInt8*);
 };
