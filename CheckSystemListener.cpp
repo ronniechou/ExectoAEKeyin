@@ -276,6 +276,8 @@ BOOL CheckSystemListener::SendExecutionData(void)
         asLine = File.ReadLine();
         if( asLine.c_str() == NULL)
             break;
+        UFC::SleepNS(10);
+        
         UFC::PStringList StrList;
         asLine.TrimRight();
         asLine.TrimLeft();
@@ -289,7 +291,6 @@ BOOL CheckSystemListener::SendExecutionData(void)
         iCurrentSeqNo = StrList[3].ToInt();
         asHost = StrList[7];
         asKey = StrList[4];
-     
 
         //---- 過濾不符主機
         if( asHost != g_asTargetHost )
