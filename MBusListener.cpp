@@ -66,7 +66,7 @@ void MBusListener::OnMigoMessage( const UFC::AnsiString& Subject, const UFC::Ans
 void MBusListener::Execute( void )
 {
     UFC::BufferedLog::Printf( " [%s][%s] star to DeQueue",  __FILE__,__FUNCTION__); 
-    UFC::Int32 FlagTick = UFC::GetTickCountMS();
+    //UFC::Int32 FlagTick = UFC::GetTickCountMS();
  
     while ( ! IsTerminated()  )
     {     

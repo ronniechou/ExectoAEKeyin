@@ -6,25 +6,34 @@ using namespace std;
 //------------------------------------------------------------------------------
 CheckSystemListener::CheckSystemListener()
 : PThread( NULL )
-, FIsLogon(FALSE)
 , FSeqNo( 0 )
 , FHaveSentSeqNo ( -1 )
-, FSendTick( 0 )
 , FConnectFailCount ( 0 )
+, FThread_HeartBeatChecker()
 {  
+    FIsLogon = TRUE;
+    FSendTick = 0;
+    FIsSendingHeartBeat = FALSE;
+    FIsSendingExecutionData = FALSE;
     FIsCheckSeqNo = g_bIsCheckSeqNo;
     FCurrentServerIP = g_asServerIP;
-    FCurrentServerPort = g_iServerPort;
-    //FSocketObject = new UFC::PClientSocket(g_asServerIP,g_iServerPort); 
+    FCurrentServerPort = g_iServerPort;    
     FSocketObject = new UFC::PClientSocket(FCurrentServerIP,FCurrentServerPort); 
     FSocketObject->SetListener(this);
     FSocketObject->Start();
+    
+    //---- 啟動 HeartBeat 執行緒
+    int iResult = pthread_create(&FThread_HeartBeatChecker, NULL ,&CheckSystemListener::HeartBeatChecker , NULL);
+    if(iResult!=0)	
+        UFC::BufferedLog::Printf ("create thread for HeartBeatChecker()  error!\n");	
 }
 //------------------------------------------------------------------------------
 CheckSystemListener::~CheckSystemListener()
 {
-    Terminate();    
+    Terminate(); 
+    pthread_join(FThread_HeartBeatChecker, NULL); // 等待HeartBeat執行緒執行完成
     UFC::SleepMS(1000); // to avoid core dump.
+    
     if(FSocketObject != NULL)
     {
         UFC::BufferedLog::Printf(" [%s][%s]  delete FSocketObject...", __FILE__,__FUNCTION__);
@@ -43,6 +52,7 @@ void CheckSystemListener::OnConnect( UFC::PClientSocket *Socket)
 void CheckSystemListener::OnDisconnect( UFC::PClientSocket *Socket)
 {
     UFC::BufferedLog::Printf( " [%s][%s] OnDisconnect!", __FILE__,__func__);
+    FIsLogon = FALSE;
     return;
 }
 //------------------------------------------------------------------------------
@@ -63,25 +73,7 @@ void CheckSystemListener::OnIdle( UFC::PClientSocket *Socket)
 }
 //------------------------------------------------------------------------------
 void CheckSystemListener::Execute( void )
-{
-    /*
-    while(1)
-    {      
-        try
-        {
-            SendHeartBeat();
-        }
-        catch( UFC::Exception &e )
-        {
-            UFC::BufferedLog::Printf(" [%s][%s] UFC exception occurred <Reason:%s>\n", __FILE__,__func__, e.what() );
-        }
-        catch(...)
-        {
-            UFC::BufferedLog::Printf(" [%s][%s] Unknown exception occurred\n", __FILE__,__func__ );
-        }
-        UFC::SleepMS(5*1000);
-    }
-    */
+{    
     while( !IsTerminated() )
     { 
         try
@@ -132,19 +124,10 @@ void CheckSystemListener::Execute( void )
                     Logon();
                 }
                 else
-                {
-                    unsigned long iCurrentTick = UFC::GetTickCountMS();
-                    if( iCurrentTick - FSendTick >= HEARTBEAT_INTERVAL )
-                    {
-                        UFC::BufferedLog::DebugPrintf( " [%s][%s]  start to send heartBeat", __FILE__,__func__);
-                        SendHeartBeat();
-                    }
-                    else
-                    {
-                        UFC::BufferedLog::DebugPrintf( " [%s][%s]  start to send ExecutionData.", __FILE__,__func__);
-                        if( SendExecutionData() == FALSE)
-                            UFC::SleepMS(10*1000);
-                    }
+                {                    
+                    //if( ExecutionDataChecker() == FALSE)
+                    ExecutionDataChecker();
+                    UFC::SleepMS(10*1000);                    
                 }
             }            
         }
@@ -194,7 +177,7 @@ BOOL CheckSystemListener::Logon( void )
     try
     {               
         UFC::BufferedLog::Printf(" [%s][%s] send data=%s", __FILE__,__func__, asData.c_str() );     
-        FSocketObject->BlockSend(caBuffer,iDataLen); 
+        FSocketObject->BlockSend(caBuffer,iDataLen);
     }
     catch( UFC::Exception &e )
     {
@@ -219,6 +202,49 @@ BOOL CheckSystemListener::Logon( void )
     return TRUE;
 }
 //------------------------------------------------------------------------------
+void* CheckSystemListener::HeartBeatChecker( void *ptr )
+{        
+    while(g_bRunning)
+    {       
+        try
+        {
+            if(FSocketObject->IsConnect() == FALSE)
+            {                
+                UFC::SleepMS( 1000 );
+                continue;
+            }            
+            if(FIsLogon == FALSE)
+            {                
+                UFC::SleepMS( 1000 );
+                continue;
+            }            
+            unsigned long iCurrentTick = UFC::GetTickCountMS();
+            if( iCurrentTick - FSendTick >= HEARTBEAT_INTERVAL )
+            {
+                //----等待 send Execution Data 完成
+                while(FIsSendingExecutionData)
+                    UFC::SleepMS( 1000 );
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                FIsSendingHeartBeat = TRUE;    
+                UFC::BufferedLog::DebugPrintf( " [%s][%s]  start to send heartBeat", __FILE__,__func__);
+                SendHeartBeat();
+            }
+        }
+        catch( UFC::Exception &e )
+        {
+            UFC::BufferedLog::Printf(" [%s][%s] UFC exception occurred <Reason:%s>", __FILE__,__func__, e.what() );            
+        }
+        catch(...)
+        {
+            UFC::BufferedLog::Printf(" [%s][%s] Unknown exception occurred", __FILE__,__func__ );
+        }
+        FIsSendingHeartBeat = FALSE;
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++        
+        UFC::SleepMS( 1000 );
+    } 
+    pthread_exit(NULL);
+}
+//------------------------------------------------------------------------------
 BOOL CheckSystemListener::SendHeartBeat()
 {
     UFC::AnsiString asData = "" ;
@@ -233,7 +259,7 @@ BOOL CheckSystemListener::SendHeartBeat()
     FEventHeartBeat.ResetEvent();               
     try
     {
-        UFC::BufferedLog::DebugPrintf(" [%s][%s] send data=%s", __FILE__,__func__, asData.c_str());               
+        UFC::BufferedLog::DebugPrintf(" [%s][%s] send data=%s", __FILE__,__func__, caBuffer);               
         FSocketObject->BlockSend(caBuffer,iDataLen);
     }
     catch( UFC::Exception &e )
@@ -258,7 +284,7 @@ BOOL CheckSystemListener::SendHeartBeat()
     return TRUE;
 }
 //------------------------------------------------------------------------------
-BOOL CheckSystemListener::SendExecutionData(void)
+BOOL CheckSystemListener::ExecutionDataChecker()
 {
     if( !UFC::FileExists(g_asExecutionFileURL.c_str()) )
     {
@@ -270,13 +296,19 @@ BOOL CheckSystemListener::SendExecutionData(void)
     UFC::AnsiString asLine,asHost,asKey;
     int iCurrentSeqNo = 0;
     BOOL bIsSendOK = TRUE;
+
+//UFC::AnsiString asRonnieTime = "";   
+//int iRonnie= 0;
+//UFC::GetTimeString_us(asRonnieTime,true);
+//UFC::BufferedLog::Printf(" [%s][%s] ==============11111 StartTime=%s", __FILE__,__FUNCTION__,asRonnieTime.c_str());
     
     while(true)
     {
         asLine = File.ReadLine();
         if( asLine.c_str() == NULL)
             break;
-        UFC::SleepNS(10);
+//iRonnie++;
+        UFC::SleepNS(100);
         
         UFC::PStringList StrList;
         asLine.TrimRight();
@@ -335,35 +367,36 @@ BOOL CheckSystemListener::SendExecutionData(void)
           
         asData.Printf("%s%s%s",SOCK_ID,MSG_TYPE_DATA,asLine.c_str());        
         memset(caBuffer,'\x0A',sizeof(caBuffer) );             
-        memcpy(caBuffer, asData.c_str() ,iDataLen );
+        memcpy(caBuffer, asData.c_str() ,iDataLen );        
         
+        //----等待 HeartBeat 傳送完成
+        while(FIsSendingHeartBeat)        
+            UFC::SleepMS( 1000 );
+        
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         //---- 傳送data
-        unsigned long iCurrentTick = UFC::GetTickCountMS();
-        FEventHeartBeat.ResetEvent(); 
+        FIsSendingExecutionData = TRUE;
+        UFC::BufferedLog::Printf(" [%s][%s] CurrentSeqNo=%d,ServerSeqNo=%d,len=%d,Data=%s", __FILE__,__FUNCTION__,iCurrentSeqNo,FSeqNo,iDataLen,asData.c_str()); 
         try
-        {
-            UFC::BufferedLog::Printf(" [%s][%s] CurrentSeqNo=%d,ServerSeqNo=%d,len=%d,Data=%s", __FILE__,__FUNCTION__,iCurrentSeqNo,FSeqNo,iDataLen,asData.c_str()); 
-            FSocketObject->BlockSend(caBuffer,iDataLen + 1); 
+        {            
+            bIsSendOK = SendExecutionData(caBuffer,iDataLen + 1);
         }
         catch( UFC::Exception &e )
         {
-            UFC::BufferedLog::Printf(" [%s][%s] UFC exception occurred <Reason:%s>\n", __FILE__,__func__, e.what() );            
-            throw e;
+            bIsSendOK = FALSE;
+            UFC::BufferedLog::Printf(" [%s][%s] UFC exception occurred <Reason:%s>", __FILE__,__func__, e.what() );            
         }
         catch(...)
         {
-            UFC::BufferedLog::Printf(" [%s][%s] Unknown exception occurred\n", __FILE__,__func__ );            
-            throw FALSE;
+            bIsSendOK = FALSE;
+            UFC::BufferedLog::Printf(" [%s][%s] Unknown exception occurred", __FILE__,__func__ );
         }
-        //----等待Server回應ack
-        if( FEventHeartBeat.WaitFor( TIMEOUT ) == FALSE ) 
-        {
-            UFC::BufferedLog::Printf( " [%s][%s] %s <IP:%s><Port:%d>", __FILE__,__func__,ERRMSG_TIMEOUT,FSocketObject->GetPeerIPAddress().c_str(),FSocketObject->GetPort());  
-            FSocketObject->Disconnect();
-            return FALSE;
-        } 
-        FEventHeartBeat.ResetEvent();
-        FSendTick = iCurrentTick;
+        FIsSendingExecutionData = FALSE;
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        
+        //---- 若傳送失敗,離開迴圈
+        if(!bIsSendOK)
+            break;
         FHaveSentSeqNo = iCurrentSeqNo;
         
         //---- 若有漏資料,直接關檔,重新判斷 (下一筆資料SeqNo 不是 Server 要的SeqNo)
@@ -377,7 +410,40 @@ BOOL CheckSystemListener::SendExecutionData(void)
             }
         }
     }
+//UFC::GetTimeString_us(asRonnieTime,true);
+//UFC::BufferedLog::Printf(" [%s][%s] ==============2222 StartTime=%s,  coumt=%d", __FILE__,__FUNCTION__,asRonnieTime.c_str(),iRonnie);  
     return bIsSendOK;
+}
+//------------------------------------------------------------------------------
+BOOL CheckSystemListener::SendExecutionData(char* ExecutionData,int DataLen)
+{
+    unsigned long iCurrentTick = UFC::GetTickCountMS();
+    FEventExecutionData.ResetEvent(); 
+    try
+    {
+        //UFC::BufferedLog::Printf(" [%s][%s] CurrentSeqNo=%d,ServerSeqNo=%d,len=%d,Data=%s", __FILE__,__FUNCTION__,iCurrentSeqNo,FSeqNo,iDataLen,asData.c_str()); 
+        FSocketObject->BlockSend(ExecutionData,DataLen); 
+    }
+    catch( UFC::Exception &e )
+    {
+        UFC::BufferedLog::Printf(" [%s][%s] UFC exception occurred <Reason:%s>\n", __FILE__,__func__, e.what() );            
+        throw e;
+    }
+    catch(...)
+    {
+        UFC::BufferedLog::Printf(" [%s][%s] Unknown exception occurred\n", __FILE__,__func__ );            
+        throw FALSE;
+    }
+    //----等待Server回應ack
+    if( FEventExecutionData.WaitFor( TIMEOUT ) == FALSE ) 
+    {
+        UFC::BufferedLog::Printf( " [%s][%s] %s <IP:%s><Port:%d>", __FILE__,__func__,ERRMSG_TIMEOUT,FSocketObject->GetPeerIPAddress().c_str(),FSocketObject->GetPort());  
+        FSocketObject->Disconnect();
+        return FALSE;
+    } 
+    FEventExecutionData.ResetEvent();
+    FSendTick = iCurrentTick;
+    return TRUE;
 }
 //------------------------------------------------------------------------------
 BOOL CheckSystemListener::UpdateKey(UFC::AnsiString *pKey)
@@ -462,7 +528,7 @@ void CheckSystemListener::ProcessResponse(int iRecvSize,UFC::UInt8 *rcvb)
     }
     else if( asMsgType == MSG_TYPE_HEARTBEAT )
     {
-        UFC::BufferedLog::DebugPrintf( " [%s][%s] receive data=%s", __FILE__,__func__,rcvb); 
+        UFC::BufferedLog::DebugPrintf( " [%s][%s] receive data=%s", __FILE__,__func__,rcvb);
        
         //---- 送出資料,收到Server返回的ACK (含下一筆的 SeqNo)
         if(iRecvSize >= LEN_SOCK_ID + LEN_MSG_TYPE + LEN_SEQNO )
@@ -470,9 +536,10 @@ void CheckSystemListener::ProcessResponse(int iRecvSize,UFC::UInt8 *rcvb)
             UFC::AnsiString asSeqNo = asData.SubString(LEN_SOCK_ID + LEN_MSG_TYPE,LEN_SEQNO);
             FSeqNo = asSeqNo.ToInt();
             UFC::BufferedLog::Printf( " [%s][%s] receive ack=%s <Next SeqNo:%d>", __FILE__,__func__,rcvb,FSeqNo);  
+            FEventExecutionData.SetEvent();
         }
-        FEventHeartBeat.SetEvent(); 
+        else            
+            FEventHeartBeat.SetEvent(); 
     }
 }
 //------------------------------------------------------------------------------
-        

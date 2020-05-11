@@ -44,6 +44,14 @@ UFC::AnsiString             FExecutionFilePrefix_OPT    = "";
 UFC::AnsiString             FExecutionFileExtension_FUT = ".DATA";
 UFC::AnsiString             FExecutionFileExtension_OPT = ".DATA";
 //------------------------------------------------------------------------------
+BOOL                        CheckSystemListener::FIsLogon;
+unsigned long               CheckSystemListener::FSendTick;
+UFC::PClientSocket          *CheckSystemListener::FSocketObject;
+UFC::PEvent                 CheckSystemListener::FEventHeartBeat;
+UFC::PEvent                 CheckSystemListener::FEventExecutionData;
+BOOL                        CheckSystemListener::FIsSendingHeartBeat;
+BOOL                        CheckSystemListener::FIsSendingExecutionData;
+//------------------------------------------------------------------------------
 void AtStart( void );
 void AtSignal( int signum );
 void AtExit( void );
@@ -85,6 +93,13 @@ void StopObjects( void )
 {
     try
     {
+        /*
+        if ( FAPPListener != NULL)
+        {            
+            delete FAPPListener; 
+            FAPPListener = NULL;
+        }
+        */ 
     }catch(...){
         UFC::BufferedLog::Printf(" [%s][%s] exception happen", __FILE__,__FUNCTION__);
     }
@@ -277,7 +292,7 @@ void PrintStartUp( void )
     UFC::BufferedLog::Printf( "    Yuanta %s", g_asAppName.c_str());
     UFC::BufferedLog::Printf( "    Startup on %s at %s ", UFC::Hostname, UFC::GetDateString().c_str() );
     UFC::BufferedLog::Printf( " ");
-    UFC::BufferedLog::Printf( "    Ver : 1.0.1 Build Date:%s       ",  __DATE__ );
+    UFC::BufferedLog::Printf( "    Ver : 1.1.0 Build Date:%s       ",  __DATE__ );
     UFC::BufferedLog::Printf( "    [%d bits version]               ",  sizeof(void*)*8 );
     UFC::BufferedLog::Printf( "    Argv               : %s         ",  g_asArgv.c_str()  ); 
     UFC::BufferedLog::Printf( "    FirstRun           : %s         ",  g_bFirstRun?"Y":"N"  );    
