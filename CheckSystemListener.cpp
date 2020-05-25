@@ -3,6 +3,7 @@
 #include "CheckSystemListener.h"
 #include "NameValueMessage.h"
 using namespace std;
+
 //------------------------------------------------------------------------------
 CheckSystemListener::CheckSystemListener()
 : PThread( NULL )
@@ -21,7 +22,7 @@ CheckSystemListener::CheckSystemListener()
     FSocketObject = new UFC::PClientSocket(FCurrentServerIP,FCurrentServerPort); 
     FSocketObject->SetListener(this);
     FSocketObject->Start();
-    
+
     //---- 啟動 HeartBeat 執行緒
     int iResult = pthread_create(&FThread_HeartBeatChecker, NULL ,&CheckSystemListener::HeartBeatChecker , NULL);
     if(iResult!=0)	
@@ -30,8 +31,8 @@ CheckSystemListener::CheckSystemListener()
 //------------------------------------------------------------------------------
 CheckSystemListener::~CheckSystemListener()
 {
-    Terminate(); 
-    pthread_join(FThread_HeartBeatChecker, NULL); // 等待HeartBeat執行緒執行完成
+    Terminate();   
+    pthread_join(FThread_HeartBeatChecker, NULL); // 等待HeartBeat執行緒執行完成   
     UFC::SleepMS(1000); // to avoid core dump.
     
     if(FSocketObject != NULL)
@@ -49,9 +50,9 @@ void CheckSystemListener::OnConnect( UFC::PClientSocket *Socket)
     return;
 }
 //------------------------------------------------------------------------------
-void CheckSystemListener::OnDisconnect( UFC::PClientSocket *Socket)
+void CheckSystemListener::OnDisconnect( UFC::PClientSocket *Socket, BOOL NeedReconnect )
 {
-    UFC::BufferedLog::Printf( " [%s][%s] OnDisconnect!", __FILE__,__func__);
+    UFC::BufferedLog::Printf( " [%s][%s] OnDisconnect(%d)!", __FILE__,__func__, NeedReconnect);
     FIsLogon = FALSE;
     return;
 }
@@ -74,7 +75,7 @@ void CheckSystemListener::OnIdle( UFC::PClientSocket *Socket)
 //------------------------------------------------------------------------------
 void CheckSystemListener::Execute( void )
 {    
-    while( !IsTerminated() )
+    while( !IsTerminated() && g_bRunning )
     { 
         try
         {
@@ -127,7 +128,7 @@ void CheckSystemListener::Execute( void )
                 {                    
                     //if( ExecutionDataChecker() == FALSE)
                     ExecutionDataChecker();
-                    UFC::SleepMS(10*1000);                    
+                    UFC::SleepMS(10*1000);
                 }
             }            
         }
@@ -243,6 +244,7 @@ void* CheckSystemListener::HeartBeatChecker( void *ptr )
         UFC::SleepMS( 1000 );
     } 
     pthread_exit(NULL);
+    return NULL;
 }
 //------------------------------------------------------------------------------
 BOOL CheckSystemListener::SendHeartBeat()
@@ -292,22 +294,16 @@ BOOL CheckSystemListener::ExecutionDataChecker()
         return FALSE;
     }
     UFC::FileStream File(g_asExecutionFileURL.c_str(),0);
-    UFC::BufferedLog::DebugPrintf(" [%s][%s] file size=%ld", __FILE__,__FUNCTION__,File.GetSize());
+    UFC::BufferedLog::DebugPrintf(" [%s][%s] file size=%d", __FILE__,__FUNCTION__, (int) File.GetSize());
     UFC::AnsiString asLine,asHost,asKey;
     int iCurrentSeqNo = 0;
     BOOL bIsSendOK = TRUE;
-
-//UFC::AnsiString asRonnieTime = "";   
-//int iRonnie= 0;
-//UFC::GetTimeString_us(asRonnieTime,true);
-//UFC::BufferedLog::Printf(" [%s][%s] ==============11111 StartTime=%s", __FILE__,__FUNCTION__,asRonnieTime.c_str());
     
     while(true)
     {
         asLine = File.ReadLine();
         if( asLine.c_str() == NULL)
             break;
-//iRonnie++;
         UFC::SleepNS(100);
         
         UFC::PStringList StrList;
@@ -410,8 +406,6 @@ BOOL CheckSystemListener::ExecutionDataChecker()
             }
         }
     }
-//UFC::GetTimeString_us(asRonnieTime,true);
-//UFC::BufferedLog::Printf(" [%s][%s] ==============2222 StartTime=%s,  coumt=%d", __FILE__,__FUNCTION__,asRonnieTime.c_str(),iRonnie);  
     return bIsSendOK;
 }
 //------------------------------------------------------------------------------
@@ -420,8 +414,7 @@ BOOL CheckSystemListener::SendExecutionData(char* ExecutionData,int DataLen)
     unsigned long iCurrentTick = UFC::GetTickCountMS();
     FEventExecutionData.ResetEvent(); 
     try
-    {
-        //UFC::BufferedLog::Printf(" [%s][%s] CurrentSeqNo=%d,ServerSeqNo=%d,len=%d,Data=%s", __FILE__,__FUNCTION__,iCurrentSeqNo,FSeqNo,iDataLen,asData.c_str()); 
+    {        
         FSocketObject->BlockSend(ExecutionData,DataLen); 
     }
     catch( UFC::Exception &e )
@@ -495,9 +488,6 @@ BOOL CheckSystemListener::UpdateKey(UFC::AnsiString *pKey)
         else
             pKey->Printf("%s,%s%s",asAE.c_str(),asGDD.c_str(),asUDD.c_str());
     }
-        
-    //UFC::BufferedLog::Printf("[%s][%s]  GDD=%s,UDD=%s!!", __FILE__,__func__, asGDD.c_str(),asUDD.c_str());  
-    //UFC::BufferedLog::Printf("[%s][%s]  len_GDD=%d,len_UDD=%d", __FILE__,__func__, asGDD.Length(),asUDD.Length());      
     return bUpdateOK;
 }
 //------------------------------------------------------------------------------

@@ -27,7 +27,7 @@ public:
     virtual ~CheckSystemListener();
 protected:  ///Implement interface SocketClientListener
     void OnConnect( UFC::PClientSocket *Socket);
-    void OnDisconnect( UFC::PClientSocket *Socket);
+    void OnDisconnect( UFC::PClientSocket *Socket, BOOL NeedReconnect = FALSE );
     BOOL OnDataArrived( UFC::PClientSocket *Socket);
     void OnIdle( UFC::PClientSocket *Socket);   
 protected: /// Implement interface PThread

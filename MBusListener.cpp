@@ -57,7 +57,7 @@ void MBusListener::OnDisconnected( )
     UFC::BufferedLog::Printf( " [%s][%s] %s is disconnected to MBus <IP:%s> <Port:%d>", __FILE__,__FUNCTION__, FAppName.c_str(),FMBusIP.c_str(), FMBusPort);
 }
 //------------------------------------------------------------------------------
-void MBusListener::OnMigoMessage( const UFC::AnsiString& Subject, const UFC::AnsiString& Key,  MTree* pTree )
+void MBusListener::OnMigoMessage( const UFC::AnsiString& Subject, const UFC::AnsiString& Key,  MTree* pTree, const Int32 SenderID )
 {
     UFC::BufferedLog::Printf( " [%s][%s] Subject=%s,Key=%s",  __FILE__,__FUNCTION__,Subject.c_str(),Key.c_str());
     FQueue.Inqueue( new MTree(*pTree) );
@@ -69,20 +69,15 @@ void MBusListener::Execute( void )
     //UFC::Int32 FlagTick = UFC::GetTickCountMS();
  
     while ( ! IsTerminated()  )
-    {     
-       //ProcessRequest(NULL);
-       //UFC::SleepMS(5000);
-        
-        
+    {          
         MTree* pMTree = FQueue.Dequeue( 1 );        
         if(pMTree == NULL)
             continue;        
-        //----
+        
         ProcessRequest(pMTree);
         
         delete pMTree;
-        pMTree = NULL;   
-        
+        pMTree = NULL; 
     }
 }
 //------------------------------------------------------------------------------
@@ -108,12 +103,10 @@ void MBusListener::ProcessRequest(MTree *pMTree)
         { 
             if( File.ReadLine(asLine) )
             {
-UFC::BufferedLog::Printf(" [%s][%s] line=%s", __FILE__,__FUNCTION__,asLine.c_str()); 
                 iSeqNo = asLine.ToInt() + 1;
             }
             else
             {
-UFC::BufferedLog::Printf(" [%s][%s] line=%s,      eof", __FILE__,__FUNCTION__,asLine.c_str()); 
                 break;
             }
         }

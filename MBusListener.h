@@ -27,7 +27,7 @@ protected:/// implement interface MonitorListener
     virtual void OnDisconnected( void );
 
 private:///implement interface MessageListener
-    virtual void OnMigoMessage( const UFC::AnsiString& Subject, const UFC::AnsiString& Key, MTree* pMTree );
+    virtual void OnMigoMessage( const UFC::AnsiString& Subject, const UFC::AnsiString& Key, MTree* pMTree, const Int32 SenderID = 0 );
     
 protected: /// Implement interface PThread
     void Execute( void );    

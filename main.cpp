@@ -151,26 +151,6 @@ void ParseConfig()
         return;
     }
     UFC::UiniFile Config(g_asConfigURL);
-
-/*    
-printf(" [%s][%s] SectionCount=%d\n", __FILE__,__func__,Config.SectionCount());  
-UFC::Section*  HostSection;
-for( int i = 0; i < Config.SectionCount(); i++ )
-{
-    HostSection = Config.GetSection( i );
-    ///< Find a HA Speedy Server, and create sync executions thread.
-    printf(" [%s][%s] i=%d,sectionName=%s\n", __FILE__,__func__,i,HostSection->GetSectionName().c_str());
-    
-    if( HostSection->GetSectionName() == "CoverIP" )
-    {
-        UFC::AnsiString asValue;
-        HostSection->GetValue("ip",asValue);
-        printf("ip=%s,",asValue.c_str());
-        HostSection->GetValue("host",asValue);
-        printf("host=%s\n",asValue.c_str());
-    }
-}
-*/
     UFC::AnsiString asValue;
     if( Config.GetValue( "Setting", "TargetHost",asValue ) == TRUE )    
         g_asTargetHost = asValue;
@@ -208,19 +188,6 @@ for( int i = 0; i < Config.SectionCount(); i++ )
         g_asOutputFilePrefix = asValue;
     if( Config.GetValue( "MBus", "OutputFileExtension",asValue ) == TRUE )    
         g_asOutputFileExtension = asValue;
-
-/*
-     if( Config.GetValue( "Setting", "ExecutionFileExtension",asValue ) == TRUE )    
-        g_asExecutionFileExtension = asValue;
-    if( Config.GetValue( "Setting", "ExecutionFilePrefix",asValue ) == TRUE )    
-        g_asExecutionFilePrefix = asValue;
-    if( Config.GetValue( "MBus", "ListenSecurity",asValue ) == TRUE )    
-        g_asListenSecurity = asValue;
-    if( g_asExecutionFileURL.AnsiPos(SECURITY_OPT) >=0 )
-        g_asTargetSecurity = SECURITY_OPT; 
-    else
-        g_asTargetSecurity = SECURITY_FUT;
-*/  
 }
 //------------------------------------------------------------------------------
 void UpdateVariable()
@@ -293,7 +260,7 @@ void PrintStartUp( void )
     UFC::BufferedLog::Printf( "    Startup on %s at %s ", UFC::Hostname, UFC::GetDateString().c_str() );
     UFC::BufferedLog::Printf( " ");
     UFC::BufferedLog::Printf( "    Ver : 1.1.0 Build Date:%s       ",  __DATE__ );
-    UFC::BufferedLog::Printf( "    [%d bits version]               ",  sizeof(void*)*8 );
+    UFC::BufferedLog::Printf( "    [%d bits version]               ",  (int) sizeof(void*)*8 );
     UFC::BufferedLog::Printf( "    Argv               : %s         ",  g_asArgv.c_str()  ); 
     UFC::BufferedLog::Printf( "    FirstRun           : %s         ",  g_bFirstRun?"Y":"N"  );    
     UFC::BufferedLog::Printf( "    Debug Level        : %d         ",  g_iDEBUG_LEVEL  );   
@@ -340,19 +307,11 @@ int main(int argc, char** argv)
     FMBusListener->StartService(); 
     
     //---- 連線 socket server & 傳送資料
-    FAPPListener->Run();  
+    FAPPListener->Run();
     
-    //int ronnie= 0;
     while ( g_bRunning )
     {  
-        UFC::SleepMS( 5*1000 );
-        /*
-        ronnie++;        
-        if(ronnie == 1)
-        {
-            delete FMBusListener;          
-        }
-        */
+        UFC::SleepMS( 5*1000 );        
     }
     UFC::BufferedLog::Printf(" [%s][%s] Daemon job interrupted!", __FILE__, __func__ );
     return 0;
