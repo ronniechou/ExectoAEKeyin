@@ -24,15 +24,15 @@ CheckSystemListener::CheckSystemListener()
     FSocketObject->Start();
 
     //---- 啟動 HeartBeat 執行緒
-    int iResult = pthread_create(&FThread_HeartBeatChecker, NULL ,&CheckSystemListener::HeartBeatChecker , NULL);
-    if(iResult!=0)	
-        UFC::BufferedLog::Printf ("create thread for HeartBeatChecker()  error!\n");	
+    //int iResult = pthread_create(&FThread_HeartBeatChecker, NULL ,&CheckSystemListener::HeartBeatChecker , NULL);
+    //if(iResult!=0)	
+    //    UFC::BufferedLog::Printf ("create thread for HeartBeatChecker()  error!\n");	
 }
 //------------------------------------------------------------------------------
 CheckSystemListener::~CheckSystemListener()
 {
-    Terminate();   
-    pthread_join(FThread_HeartBeatChecker, NULL); // 等待HeartBeat執行緒執行完成   
+    Terminate();
+    //pthread_join(FThread_HeartBeatChecker, NULL); // 等待HeartBeat執行緒執行完成
     UFC::SleepMS(1000); // to avoid core dump.
     
     if(FSocketObject != NULL)
@@ -50,9 +50,9 @@ void CheckSystemListener::OnConnect( UFC::PClientSocket *Socket)
     return;
 }
 //------------------------------------------------------------------------------
-void CheckSystemListener::OnDisconnect( UFC::PClientSocket *Socket, BOOL NeedReconnect )
+void CheckSystemListener::OnDisconnect( UFC::PClientSocket *Socket)
 {
-    UFC::BufferedLog::Printf( " [%s][%s] OnDisconnect(%d)!", __FILE__,__func__, NeedReconnect);
+    UFC::BufferedLog::Printf( " [%s][%s] OnDisconnect!", __FILE__,__func__);
     FIsLogon = FALSE;
     return;
 }
@@ -69,7 +69,7 @@ BOOL CheckSystemListener::OnDataArrived( UFC::PClientSocket *Socket)
 //------------------------------------------------------------------------------
 void CheckSystemListener::OnIdle( UFC::PClientSocket *Socket)
 {
-    UFC::BufferedLog::Printf( " [%s][%s] OnIdle!", __FILE__,__func__);
+    //UFC::BufferedLog::Printf( " [%s][%s] OnIdle!", __FILE__,__func__);
     return;
 }
 //------------------------------------------------------------------------------
@@ -128,7 +128,7 @@ void CheckSystemListener::Execute( void )
                 {                    
                     //if( ExecutionDataChecker() == FALSE)
                     ExecutionDataChecker();
-                    UFC::SleepMS(10*1000);
+                    UFC::SleepMS(1*1000);
                 }
             }            
         }
@@ -204,46 +204,41 @@ BOOL CheckSystemListener::Logon( void )
 }
 //------------------------------------------------------------------------------
 void* CheckSystemListener::HeartBeatChecker( void *ptr )
-{        
-    while(g_bRunning)
-    {       
-        try
+{
+    try
+    {
+        if(FSocketObject->IsConnect() == FALSE)
+        {                
+            UFC::SleepMS( 1000 );
+            return NULL;
+        }            
+        if(FIsLogon == FALSE)
+        {                
+            UFC::SleepMS( 1000 );
+            return NULL;
+        }
+        unsigned long iCurrentTick = UFC::GetTickCountMS();
+        if( iCurrentTick - FSendTick >= HEARTBEAT_INTERVAL )
         {
-            if(FSocketObject->IsConnect() == FALSE)
-            {                
+            //----等待 send Execution Data 完成
+            while(FIsSendingExecutionData)
                 UFC::SleepMS( 1000 );
-                continue;
-            }            
-            if(FIsLogon == FALSE)
-            {                
-                UFC::SleepMS( 1000 );
-                continue;
-            }            
-            unsigned long iCurrentTick = UFC::GetTickCountMS();
-            if( iCurrentTick - FSendTick >= HEARTBEAT_INTERVAL )
-            {
-                //----等待 send Execution Data 完成
-                while(FIsSendingExecutionData)
-                    UFC::SleepMS( 1000 );
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                FIsSendingHeartBeat = TRUE;    
-                UFC::BufferedLog::DebugPrintf( " [%s][%s]  start to send heartBeat", __FILE__,__func__);
-                SendHeartBeat();
-            }
+            FIsSendingHeartBeat = TRUE;    
+            UFC::BufferedLog::DebugPrintf( " [%s][%s]  start to send heartBeat", __FILE__,__func__);
+            SendHeartBeat();
         }
-        catch( UFC::Exception &e )
-        {
-            UFC::BufferedLog::Printf(" [%s][%s] UFC exception occurred <Reason:%s>", __FILE__,__func__, e.what() );            
-        }
-        catch(...)
-        {
-            UFC::BufferedLog::Printf(" [%s][%s] Unknown exception occurred", __FILE__,__func__ );
-        }
-        FIsSendingHeartBeat = FALSE;
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++        
-        UFC::SleepMS( 1000 );
-    } 
-    pthread_exit(NULL);
+    }
+    catch( UFC::Exception &e )
+    {
+        UFC::BufferedLog::Printf(" [%s][%s] UFC exception occurred <Reason:%s>", __FILE__,__func__, e.what() );            
+    }
+    catch(...)
+    {
+        UFC::BufferedLog::Printf(" [%s][%s] Unknown exception occurred", __FILE__,__func__ );
+    }
+    FIsSendingHeartBeat = FALSE;
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     return NULL;
 }
 //------------------------------------------------------------------------------
@@ -291,26 +286,43 @@ BOOL CheckSystemListener::ExecutionDataChecker()
     if( !UFC::FileExists(g_asExecutionFileURL.c_str()) )
     {
         UFC::BufferedLog::DebugPrintf(" [%s][%s] Execution file NOT exist. <FileName:%s>", __FILE__,__FUNCTION__,g_asExecutionFileURL.c_str());
+        HeartBeatChecker(NULL);
         return FALSE;
-    }
-    UFC::FileStream File(g_asExecutionFileURL.c_str(),0);
-    UFC::BufferedLog::DebugPrintf(" [%s][%s] file size=%d", __FILE__,__FUNCTION__, (int) File.GetSize());
+    } 
+    //UFC::FileStream File(g_asExecutionFileURL.c_str(),0);
+    UFC::FileStream64 File(g_asExecutionFileURL.c_str(), "r" , FALSE,  512*1024);
+    UFC::BufferedLog::DebugPrintf(" [%s][%s] file size=%d", __FILE__,__FUNCTION__, (int) File.GetSize());    
     UFC::AnsiString asLine,asHost,asKey;
     int iCurrentSeqNo = 0;
     BOOL bIsSendOK = TRUE;
+    char caTemp[1];
     
     while(true)
     {
-        asLine = File.ReadLine();
-        if( asLine.c_str() == NULL)
-            break;
-        UFC::SleepNS(100);
+        HeartBeatChecker(NULL);
         
+        //---- ReadLine
+        //asLine = File.ReadLine();
+        UFC::PStringBuffer StringBuffer( 256 );
+        do
+        {   
+            if( File.Read(caTemp,1) == 1)
+                StringBuffer.Append(caTemp[0]);
+            else        
+                break;
+        }while(caTemp[0] != '\n');        
+        asLine = StringBuffer.ToString(); 
+        if( asLine.c_str() == NULL)
+        {
+            UFC::SleepMS(1000);
+            continue;
+        }
+        
+        UFC::SleepNS(100);
         UFC::PStringList StrList;
         asLine.TrimRight();
         asLine.TrimLeft();
         StrList.SetStrings(asLine,"|");
-       
         if( StrList.ItemCount() < 8 )
         {
             UFC::BufferedLog::Printf(" [%s][%s] %s,text format error of Execution <line:%s>", __FILE__,__FUNCTION__,ERRMSG_FORMAT_ERROR,asLine.c_str());
@@ -342,7 +354,7 @@ BOOL CheckSystemListener::ExecutionDataChecker()
                 UFC::BufferedLog::DebugPrintf(" [%s][%s] Filter data! CurrentSeqNo < FSeqNo  <CurrentSeq=%d> <FSeq=%d> <HaveSentSeqNo=%d>", __FILE__,__FUNCTION__,iCurrentSeqNo,FSeqNo,FHaveSentSeqNo);  
                 continue;
             }
-        }            
+        }
         //---- 重組Key值 = "AE,GDD+UDD"
         if( UpdateKey(&asKey) )
         {
@@ -372,7 +384,7 @@ BOOL CheckSystemListener::ExecutionDataChecker()
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         //---- 傳送data
         FIsSendingExecutionData = TRUE;
-        UFC::BufferedLog::Printf(" [%s][%s] CurrentSeqNo=%d,ServerSeqNo=%d,len=%d,Data=%s", __FILE__,__FUNCTION__,iCurrentSeqNo,FSeqNo,iDataLen,asData.c_str()); 
+        UFC::BufferedLog::Printf(" [%s][%s] CurrentSeqNo=%d,ServerSeqNo=%d,len=%d,Data=%s", __FILE__,__FUNCTION__,iCurrentSeqNo,FSeqNo,iDataLen,asData.c_str());
         try
         {            
             bIsSendOK = SendExecutionData(caBuffer,iDataLen + 1);

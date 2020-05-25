@@ -259,7 +259,7 @@ void PrintStartUp( void )
     UFC::BufferedLog::Printf( "    Yuanta %s", g_asAppName.c_str());
     UFC::BufferedLog::Printf( "    Startup on %s at %s ", UFC::Hostname, UFC::GetDateString().c_str() );
     UFC::BufferedLog::Printf( " ");
-    UFC::BufferedLog::Printf( "    Ver : 1.1.0 Build Date:%s       ",  __DATE__ );
+    UFC::BufferedLog::Printf( "    Ver : 1.2.0 Build Date:%s       ",  __DATE__ );
     UFC::BufferedLog::Printf( "    [%d bits version]               ",  (int) sizeof(void*)*8 );
     UFC::BufferedLog::Printf( "    Argv               : %s         ",  g_asArgv.c_str()  ); 
     UFC::BufferedLog::Printf( "    FirstRun           : %s         ",  g_bFirstRun?"Y":"N"  );    

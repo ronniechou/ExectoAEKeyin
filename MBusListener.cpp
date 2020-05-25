@@ -57,7 +57,7 @@ void MBusListener::OnDisconnected( )
     UFC::BufferedLog::Printf( " [%s][%s] %s is disconnected to MBus <IP:%s> <Port:%d>", __FILE__,__FUNCTION__, FAppName.c_str(),FMBusIP.c_str(), FMBusPort);
 }
 //------------------------------------------------------------------------------
-void MBusListener::OnMigoMessage( const UFC::AnsiString& Subject, const UFC::AnsiString& Key,  MTree* pTree, const Int32 SenderID )
+void MBusListener::OnMigoMessage( const UFC::AnsiString& Subject, const UFC::AnsiString& Key,  MTree* pTree  )
 {
     UFC::BufferedLog::Printf( " [%s][%s] Subject=%s,Key=%s",  __FILE__,__FUNCTION__,Subject.c_str(),Key.c_str());
     FQueue.Inqueue( new MTree(*pTree) );
